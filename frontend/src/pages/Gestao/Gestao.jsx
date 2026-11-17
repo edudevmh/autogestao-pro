@@ -18,6 +18,52 @@ function Gestao() {
     navigate("/login", { replace: true });
   }
 
+  // Extrai de forma limpa apenas o Nome ou o E-mail da oficina logada
+  const nomeOuEmailLogado = (() => {
+    // Se o usuário veio como objeto do contexto
+    if (usuario) {
+      if (typeof usuario === "object") {
+        return usuario.nome || usuario.email || usuario.user?.nome || usuario.user?.email;
+      }
+      if (typeof usuario === "string") {
+        try {
+          const parsed = JSON.parse(usuario);
+          return parsed.nome || parsed.email || parsed.user?.nome || parsed.user?.email || usuario;
+        } catch {
+          return usuario;
+        }
+      }
+    }
+
+    // Fallback verificando o localStorage / sessionStorage
+    try {
+      const chaves = ["usuario", "user", "autogestao_sessao"];
+      for (const chave of chaves) {
+        const itemLocal = localStorage.getItem(chave);
+        if (itemLocal) {
+          const parsed = JSON.parse(itemLocal);
+          if (parsed.nome) return parsed.nome;
+          if (parsed.email) return parsed.email;
+          if (parsed.user?.nome) return parsed.user.nome;
+          if (parsed.user?.email) return parsed.user.email;
+        }
+
+        const itemSession = sessionStorage.getItem(chave);
+        if (itemSession) {
+          const parsed = JSON.parse(itemSession);
+          if (parsed.nome) return parsed.nome;
+          if (parsed.email) return parsed.email;
+          if (parsed.user?.nome) return parsed.user.nome;
+          if (parsed.user?.email) return parsed.user.email;
+        }
+      }
+    } catch (e) {
+      console.error("Erro ao ler dados da sessão", e);
+    }
+
+    return "Oficina AutoGestão";
+  })();
+
   return (
     <div className="gestao-container">
       {/* Menu lateral */}
@@ -48,7 +94,9 @@ function Gestao() {
 
         {/* Usuário autenticado e logout */}
         <div className="gestao-usuario-area">
-          <p className="gestao-usuario-email">{usuario?.email}</p>
+          <p className="gestao-usuario-email" style={{ fontWeight: "600", fontSize: "13px", wordBreak: "break-all" }}>
+            {nomeOuEmailLogado}
+          </p>
 
           <button
             type="button"

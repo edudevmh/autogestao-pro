@@ -5,9 +5,7 @@ import ProtectedRoute from "../components/ProtectedRoute/ProtectedRoute.jsx";
 
 import Admin from "../pages/Admin/Admin.jsx";
 import Gestao from "../pages/Gestao/Gestao.jsx";
-import Cliente from "../pages/Cliente/Cliente.jsx";
 import Login from "../pages/Login/Login.jsx";
-import PrimeiroAcesso from "../pages/PrimeiroAcesso/PrimeiroAcesso.jsx";
 
 import Dashboard from "../pages/Dashboard/Dashboard.jsx";
 import Clients from "../pages/Clients/Clients.jsx";
@@ -22,7 +20,6 @@ function AppRoutes() {
       {/* Rotas públicas */}
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/primeiro-acesso" element={<PrimeiroAcesso />} />
       <Route path="/o/:slugOficina" element={<OficinaPublica />} />
 
       {/* Administrador do sistema */}
@@ -39,11 +36,6 @@ function AppRoutes() {
           <Route path="veiculos" element={<Vehicles />} />
           <Route path="ordens" element={<ServiceOrders />} />
         </Route>
-      </Route>
-
-      {/* Cliente */}
-      <Route element={<ProtectedRoute perfisPermitidos={["CLIENTE"]} />}>
-        <Route path="/cliente" element={<Cliente />} />
       </Route>
     </Routes>
   );

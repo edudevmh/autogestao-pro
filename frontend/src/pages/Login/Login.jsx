@@ -1,11 +1,12 @@
 import { useState } from "react";
 import "./Login.css";
-import { useAuth } from "../../contexts/useAuth.js";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+
+const API_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:8080"
+).replace(/\/$/, "");
 
 function Login() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
@@ -15,34 +16,43 @@ function Login() {
 
   async function handleLogin(event) {
     event.preventDefault();
-
-    setErro("");
     setCarregando(true);
+    setErro("");
 
     try {
-      const usuario = await login(email, senha);
+      // Faz a requisição real para a rota de login do back-end
+      const response = await fetch(`${API_URL}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          senha: senha.trim(),
+        }),
+      });
 
-      const rotasPorPerfil = {
-        ADM_SISTEMA: "/admin",
-        ADM_OFICINA: "/gestao",
-        CLIENTE: "/cliente",
-      };
+      const data = await response.json();
 
-      let destino = rotasPorPerfil[usuario.perfil];
-
-      if (usuario.perfil === "CLIENTE" && slugOficina) {
-        destino = `/cliente?oficina=${encodeURIComponent(slugOficina)}`;
+      if (!response.ok) {
+        throw new Error(data.error || "E-mail ou senha incorretos.");
       }
 
-      if (!destino) {
-        setErro("Perfil de usuário não reconhecido.");
-        return;
-      }
+      // Salva os dados reais retornados pelo back-end no navegador
+      localStorage.setItem("token", data.token || data.accessToken);
+      localStorage.setItem("usuario", JSON.stringify(data.usuario || data.user));
+      
+      // Salva também no sessionStorage se necessário
+      sessionStorage.setItem("autogestao_sessao", JSON.stringify(data));
 
-      navigate(destino, { replace: true });
+      // Define o destino com base no perfil retornado pela API
+      const perfil = data.usuario?.perfil || data.user?.perfil;
+      const destino = perfil === "ADM_SISTEMA" ? "/admin" : "/gestao";
+
+      // Redireciona para o painel correto
+      window.location.href = destino;
     } catch (error) {
-      setErro(error.message);
-    } finally {
+      setErro(error.message || "Erro ao realizar login.");
       setCarregando(false);
     }
   }
@@ -105,7 +115,7 @@ function Login() {
             </div>
 
             {erro && (
-              <p role="alert" style={{ color: "var(--color-danger)" }}>
+              <p role="alert" style={{ color: "var(--color-danger)", marginBottom: "12px", fontSize: "13px" }}>
                 {erro}
               </p>
             )}

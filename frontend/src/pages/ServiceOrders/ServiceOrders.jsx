@@ -3,26 +3,51 @@ import {
   getOrdensServico,
   createOrdemServico,
   finalizarOrdemServico,
+  getClientes,
 } from "../../services/api";
 
 export default function ServiceOrders() {
   const [ordens, setOrdens] = useState([]);
+  const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modelo, setModelo] = useState("");
   const [placa, setPlaca] = useState("");
   const [cliente, setCliente] = useState("");
+  const [telefone, setTelefone] = useState("");
   const [problema, setProblema] = useState("");
   const [status, setStatus] = useState("EM ANDAMENTO");
   const [valorTotal, setValorTotal] = useState("");
 
-  async function fetchOrdens() {
+  // Função auxiliar para recuperar o ID da oficina logada no localStorage
+  function getOficinaIdLogada() {
     try {
-      const data = await getOrdensServico();
-      setOrdens(data);
+      const usuarioSalvo = localStorage.getItem("usuario") || localStorage.getItem("user");
+      if (usuarioSalvo) {
+        const parsed = JSON.parse(usuarioSalvo);
+        return parsed.id || parsed.usuario?.id || null;
+      }
+    } catch (e) {
+      console.error("Erro ao ler usuário do localStorage", e);
+    }
+    return null;
+  }
+
+  async function fetchData() {
+    try {
+      const oficinaId = getOficinaIdLogada();
+      
+      // Busca as ordens de serviço e clientes filtrados pela oficina logada
+      const [ordensData, clientesData] = await Promise.all([
+        getOrdensServico(oficinaId),
+        getClientes(oficinaId),
+      ]);
+      
+      setOrdens(ordensData || []);
+      setClientes(clientesData || []);
     } catch (error) {
-      console.error("Erro ao carregar ordens de serviço:", error);
+      console.error("Erro ao carregar dados:", error);
     } finally {
       setLoading(false);
     }
@@ -31,15 +56,21 @@ export default function ServiceOrders() {
   useEffect(() => {
     let ativo = true;
 
-    async function carregarOrdens() {
+    async function carregar() {
       try {
-        const data = await getOrdensServico();
+        const oficinaId = getOficinaIdLogada();
+
+        const [ordensData, clientesData] = await Promise.all([
+          getOrdensServico(oficinaId),
+          getClientes(oficinaId),
+        ]);
 
         if (ativo) {
-          setOrdens(data);
+          setOrdens(ordensData || []);
+          setClientes(clientesData || []);
         }
       } catch (error) {
-        console.error("Erro ao carregar ordens de serviço:", error);
+        console.error("Erro ao carregar dados:", error);
       } finally {
         if (ativo) {
           setLoading(false);
@@ -47,23 +78,45 @@ export default function ServiceOrders() {
       }
     }
 
-    carregarOrdens();
+    carregar();
 
     return () => {
       ativo = false;
     };
   }, []);
 
+  const handlePlacaBlur = (valorPlaca) => {
+    const placaLimpa = valorPlaca.trim().toUpperCase();
+    setPlaca(placaLimpa);
+
+    if (placaLimpa) {
+      const clienteEncontrado = clientes.find(
+        (cli) => (cli.placa_carro || cli.placa || "").toUpperCase() === placaLimpa
+      );
+
+      if (clienteEncontrado) {
+        setCliente(clienteEncontrado.nome || "");
+        setTelefone(clienteEncontrado.telefone || "");
+        setModelo(clienteEncontrado.modelo_veiculo || clienteEncontrado.modelo || "");
+      }
+    }
+  };
+
   async function handleSubmit(e) {
     e.preventDefault();
     try {
+      const oficinaId = getOficinaIdLogada();
+
       const novaOrdem = {
         modelo,
         placa,
         cliente,
+        telefone,
         problema,
         status,
         valorTotal: parseFloat(valorTotal) || 0,
+        valor_total: parseFloat(valorTotal) || 0,
+        oficinaId: oficinaId ? Number(oficinaId) : null, // Envia o ID da oficina vinculada
       };
 
       await createOrdemServico(novaOrdem);
@@ -72,11 +125,12 @@ export default function ServiceOrders() {
       setModelo("");
       setPlaca("");
       setCliente("");
+      setTelefone("");
       setProblema("");
       setStatus("EM ANDAMENTO");
       setValorTotal("");
 
-      fetchOrdens();
+      fetchData();
     } catch (error) {
       console.error("Erro ao criar ordem de serviço:", error);
       alert("Erro ao criar ordem de serviço.");
@@ -86,7 +140,7 @@ export default function ServiceOrders() {
   async function handleFinalizar(id) {
     try {
       await finalizarOrdemServico(id);
-      fetchOrdens();
+      fetchData();
     } catch (error) {
       console.error("Erro ao finalizar a ordem de serviço:", error);
       alert("Erro ao finalizar a ordem de serviço.");
@@ -158,157 +212,43 @@ export default function ServiceOrders() {
                 borderBottom: "1px solid #e2e8f0",
               }}
             >
-              <th
-                style={{
-                  padding: "16px",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  color: "#64748b",
-                  textTransform: "uppercase",
-                }}
-              >
-                OS #
-              </th>
-              <th
-                style={{
-                  padding: "16px",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  color: "#64748b",
-                  textTransform: "uppercase",
-                }}
-              >
-                Veículo / Placa
-              </th>
-              <th
-                style={{
-                  padding: "16px",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  color: "#64748b",
-                  textTransform: "uppercase",
-                }}
-              >
-                Cliente
-              </th>
-              <th
-                style={{
-                  padding: "16px",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  color: "#64748b",
-                  textTransform: "uppercase",
-                }}
-              >
-                Problema Relatado
-              </th>
-              <th
-                style={{
-                  padding: "16px",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  color: "#64748b",
-                  textTransform: "uppercase",
-                }}
-              >
-                Status
-              </th>
-              <th
-                style={{
-                  padding: "16px",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  color: "#64748b",
-                  textTransform: "uppercase",
-                }}
-              >
-                Valor Total
-              </th>
-              <th
-                style={{
-                  padding: "16px",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  color: "#64748b",
-                  textTransform: "uppercase",
-                  textAlign: "center",
-                }}
-              >
-                Ações
-              </th>
+              <th style={{ padding: "16px", fontSize: "12px", fontWeight: "600", color: "#64748b", textTransform: "uppercase" }}>OS #</th>
+              <th style={{ padding: "16px", fontSize: "12px", fontWeight: "600", color: "#64748b", textTransform: "uppercase" }}>Veículo / Placa</th>
+              <th style={{ padding: "16px", fontSize: "12px", fontWeight: "600", color: "#64748b", textTransform: "uppercase" }}>Cliente / Contato</th>
+              <th style={{ padding: "16px", fontSize: "12px", fontWeight: "600", color: "#64748b", textTransform: "uppercase" }}>Problema Relatado</th>
+              <th style={{ padding: "16px", fontSize: "12px", fontWeight: "600", color: "#64748b", textTransform: "uppercase" }}>Status</th>
+              <th style={{ padding: "16px", fontSize: "12px", fontWeight: "600", color: "#64748b", textTransform: "uppercase" }}>Valor Total</th>
+              <th style={{ padding: "16px", fontSize: "12px", fontWeight: "600", color: "#64748b", textTransform: "uppercase", textAlign: "center" }}>Ações</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td
-                  colSpan="7"
-                  style={{
-                    padding: "24px",
-                    textAlign: "center",
-                    color: "#64748b",
-                    fontSize: "14px",
-                  }}
-                >
+                <td colSpan="7" style={{ padding: "24px", textAlign: "center", color: "#64748b", fontSize: "14px" }}>
                   Carregando...
                 </td>
               </tr>
             ) : ordens.length === 0 ? (
               <tr>
-                <td
-                  colSpan="7"
-                  style={{
-                    padding: "24px",
-                    textAlign: "center",
-                    color: "#64748b",
-                    fontSize: "14px",
-                  }}
-                >
+                <td colSpan="7" style={{ padding: "24px", textAlign: "center", color: "#64748b", fontSize: "14px" }}>
                   Nenhuma ordem cadastrada.
                 </td>
               </tr>
             ) : (
               ordens.map((os) => (
                 <tr key={os.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
-                  <td
-                    style={{
-                      padding: "16px",
-                      fontSize: "14px",
-                      fontWeight: "700",
-                      color: "#1e293b",
-                    }}
-                  >
+                  <td style={{ padding: "16px", fontSize: "14px", fontWeight: "700", color: "#1e293b" }}>
                     {String(os.id).padStart(3, "0")}
                   </td>
-                  <td
-                    style={{
-                      padding: "16px",
-                      fontSize: "14px",
-                      color: "#334155",
-                    }}
-                  >
+                  <td style={{ padding: "16px", fontSize: "14px", color: "#334155" }}>
                     <div style={{ fontWeight: "600" }}>{os.modelo}</div>
-                    <div style={{ fontSize: "12px", color: "#64748b" }}>
-                      {os.placa}
-                    </div>
+                    <div style={{ fontSize: "12px", color: "#64748b" }}>{os.placa}</div>
                   </td>
-                  <td
-                    style={{
-                      padding: "16px",
-                      fontSize: "14px",
-                      color: "#334155",
-                    }}
-                  >
-                    {os.cliente}
+                  <td style={{ padding: "16px", fontSize: "14px", color: "#334155" }}>
+                    <div style={{ fontWeight: "600" }}>{os.cliente}</div>
+                    <div style={{ fontSize: "12px", color: "#64748b" }}>{os.telefone || "-"}</div>
                   </td>
-                  <td
-                    style={{
-                      padding: "16px",
-                      fontSize: "14px",
-                      color: "#64748b",
-                      maxWidth: "200px",
-                    }}
-                  >
+                  <td style={{ padding: "16px", fontSize: "14px", color: "#64748b", maxWidth: "200px" }}>
                     {os.problema}
                   </td>
                   <td style={{ padding: "16px", fontSize: "14px" }}>
@@ -318,24 +258,15 @@ export default function ServiceOrders() {
                         fontSize: "11px",
                         fontWeight: "700",
                         borderRadius: "9999px",
-                        backgroundColor:
-                          os.status === "FINALIZADA" ? "#dcfce7" : "#fef9c3",
-                        color:
-                          os.status === "FINALIZADA" ? "#166534" : "#854d0e",
+                        backgroundColor: os.status === "FINALIZADA" ? "#dcfce7" : "#fef9c3",
+                        color: os.status === "FINALIZADA" ? "#166534" : "#854d0e",
                       }}
                     >
                       {os.status}
                     </span>
                   </td>
-                  <td
-                    style={{
-                      padding: "16px",
-                      fontSize: "14px",
-                      fontWeight: "700",
-                      color: "#1e293b",
-                    }}
-                  >
-                    R$ {Number(os.valorTotal || 0).toFixed(2)}
+                  <td style={{ padding: "16px", fontSize: "14px", fontWeight: "700", color: "#16a34a" }}>
+                    R$ {Number(os.valor_total || os.valorTotal || 0).toFixed(2)}
                   </td>
                   <td style={{ padding: "16px", textAlign: "center" }}>
                     {os.status !== "FINALIZADA" && (
@@ -404,10 +335,41 @@ export default function ServiceOrders() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "2fr 1fr",
+                  gridTemplateColumns: "1fr 1fr",
                   gap: "12px",
                 }}
               >
+                <div>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      color: "#475569",
+                      marginBottom: "4px",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Placa (Busca Auto)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="BYY5D73"
+                    value={placa}
+                    onChange={(e) => setPlaca(e.target.value)}
+                    onBlur={(e) => handlePlacaBlur(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      borderRadius: "6px",
+                      border: "1px solid #cbd5e1",
+                      fontSize: "14px",
+                      boxSizing: "border-box",
+                      textTransform: "uppercase",
+                    }}
+                  />
+                </div>
                 <div>
                   <label
                     style={{
@@ -424,9 +386,47 @@ export default function ServiceOrders() {
                   <input
                     type="text"
                     required
-                    placeholder="Ex: Fuscão Preto"
+                    placeholder="Puxado pela placa"
                     value={modelo}
                     onChange={(e) => setModelo(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      borderRadius: "6px",
+                      border: "1px solid #cbd5e1",
+                      fontSize: "14px",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "2fr 1fr",
+                  gap: "12px",
+                }}
+              >
+                <div>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      color: "#475569",
+                      marginBottom: "4px",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Cliente Proprietário
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Puxado pela placa"
+                    value={cliente}
+                    onChange={(e) => setCliente(e.target.value)}
                     style={{
                       width: "100%",
                       padding: "10px",
@@ -448,14 +448,13 @@ export default function ServiceOrders() {
                       textTransform: "uppercase",
                     }}
                   >
-                    Placa
+                    Telefone
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="BYY5D73"
-                    value={placa}
-                    onChange={(e) => setPlaca(e.target.value)}
+                    placeholder="Telefone"
+                    value={telefone}
+                    onChange={(e) => setTelefone(e.target.value)}
                     style={{
                       width: "100%",
                       padding: "10px",
@@ -466,36 +465,6 @@ export default function ServiceOrders() {
                     }}
                   />
                 </div>
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "12px",
-                    fontWeight: "700",
-                    color: "#475569",
-                    marginBottom: "4px",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Cliente Proprietário
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Eduardo Vilches"
-                  value={cliente}
-                  onChange={(e) => setCliente(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "6px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "14px",
-                    boxSizing: "border-box",
-                  }}
-                />
               </div>
 
               <div>

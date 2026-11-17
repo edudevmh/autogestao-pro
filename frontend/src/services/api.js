@@ -1,17 +1,44 @@
 const API_URL = "http://localhost:8080";
 const STORAGE_KEY = "autogestao_sessao";
 
+// Função para descobrir o ID da oficina logada caso não seja passado por parâmetro
+function getOficinaIdAtual() {
+  try {
+    // Tenta pegar do objeto de sessão ou do usuário salvo no localStorage
+    const sessao = sessionStorage.getItem(STORAGE_KEY);
+    if (sessao) {
+      const parsed = JSON.parse(sessao);
+      if (parsed.id || parsed.user?.id) return parsed.id || parsed.user.id;
+    }
+
+    const usuarioSalvo = localStorage.getItem("usuario") || localStorage.getItem("user");
+    if (usuarioSalvo) {
+      const parsed = JSON.parse(usuarioSalvo);
+      return parsed.id || parsed.usuario?.id || parsed.user?.id || null;
+    }
+  } catch (e) {
+    console.error("Erro ao ler ID da oficina", e);
+  }
+  return null;
+}
+
 // Função central para requisições autenticadas
 export async function apiFetch(endpoint, options = {}) {
-  const dados = sessionStorage.getItem(STORAGE_KEY);
   let token = null;
 
-  if (dados) {
-    try {
-      token = JSON.parse(dados).token;
-    } catch {
-      sessionStorage.removeItem(STORAGE_KEY);
+  try {
+    const dados = sessionStorage.getItem(STORAGE_KEY);
+    if (dados) {
+      const parsed = JSON.parse(dados);
+      if (parsed.token) token = parsed.token;
     }
+  } catch {
+    // ignora erro de parse
+  }
+
+  // Fallback para o localStorage ou token de estudo se não achar no sessionStorage
+  if (!token) {
+    token = localStorage.getItem("token") || "fake-jwt-token-estudo";
   }
 
   const headers = new Headers(options.headers);
@@ -31,18 +58,16 @@ export async function apiFetch(endpoint, options = {}) {
     headers,
   });
 
-  if (response.status === 401 && token) {
-    sessionStorage.removeItem(STORAGE_KEY);
-    window.dispatchEvent(new Event("auth:unauthorized"));
-  }
-
   return response;
 }
 
 // CLIENTES
 
-export async function getClientes() {
-  const response = await apiFetch("/api/clientes");
+export async function getClientes(oficinaIdParam) {
+  const oficinaId = oficinaIdParam || getOficinaIdAtual();
+  const endpoint = oficinaId ? `/api/clientes?oficinaId=${oficinaId}` : "/api/clientes";
+  
+  const response = await apiFetch(endpoint);
 
   if (!response.ok) {
     throw new Error("Erro ao buscar clientes");
@@ -66,8 +91,11 @@ export async function createCliente(cliente) {
 
 // VEÍCULOS
 
-export async function getVeiculos() {
-  const response = await apiFetch("/api/veiculos");
+export async function getVeiculos(oficinaIdParam) {
+  const oficinaId = oficinaIdParam || getOficinaIdAtual();
+  const endpoint = oficinaId ? `/api/veiculos?oficinaId=${oficinaId}` : "/api/veiculos";
+
+  const response = await apiFetch(endpoint);
 
   if (!response.ok) {
     throw new Error("Erro ao buscar veículos");
@@ -78,8 +106,11 @@ export async function getVeiculos() {
 
 // ORDENS DE SERVIÇO
 
-export async function getOrdensServico() {
-  const response = await apiFetch("/api/ordens");
+export async function getOrdensServico(oficinaIdParam) {
+  const oficinaId = oficinaIdParam || getOficinaIdAtual();
+  const endpoint = oficinaId ? `/api/ordens?oficinaId=${oficinaId}` : "/api/ordens";
+
+  const response = await apiFetch(endpoint);
 
   if (!response.ok) {
     throw new Error("Erro ao buscar ordens de serviço");

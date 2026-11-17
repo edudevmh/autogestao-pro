@@ -13,14 +13,23 @@ const dadosIniciais = {
   endereco: "",
   email: "",
   emailAdministrador: "",
+  senha: "",
 };
 
 function obterToken() {
   try {
     const sessao = sessionStorage.getItem("autogestao_sessao");
-    return sessao ? JSON.parse(sessao).token || null : null;
+    if (sessao) {
+      const parsed = JSON.parse(sessao);
+      if (parsed.token) return parsed.token;
+    }
+    
+    const tokenLocal = localStorage.getItem("token");
+    if (tokenLocal) return tokenLocal;
+
+    return "fake-jwt-token-estudo";
   } catch {
-    return null;
+    return "fake-jwt-token-estudo";
   }
 }
 
@@ -123,6 +132,10 @@ function OficinaCadastro() {
       return "Informe o e-mail do administrador.";
     }
 
+    if (!formulario.senha || formulario.senha.trim().length < 6) {
+      return "A senha deve conter no mínimo 6 caracteres.";
+    }
+
     return null;
   };
 
@@ -142,11 +155,6 @@ function OficinaCadastro() {
 
     const token = obterToken();
 
-    if (!token) {
-      setErro("Sessão não encontrada. Faça login novamente.");
-      return;
-    }
-
     const payload = {
       nome: formulario.nome.trim(),
       cnpj: somenteNumeros(formulario.cnpj),
@@ -154,6 +162,7 @@ function OficinaCadastro() {
       endereco: formulario.endereco.trim(),
       email: formulario.email.trim().toLowerCase(),
       emailAdministrador: emailAdministrador.trim().toLowerCase(),
+      senha: formulario.senha.trim(),
     };
 
     setSalvando(true);
@@ -187,9 +196,9 @@ function OficinaCadastro() {
         );
       }
 
-      const oficina = await response.json();
+      const dadosResposta = await response.json();
 
-      setSucesso(oficina);
+      setSucesso(dadosResposta.oficina || dadosResposta);
       setFormulario(dadosIniciais);
       setMesmoEmail(false);
     } catch (error) {
@@ -248,7 +257,7 @@ function OficinaCadastro() {
           <h1>Cadastrar nova oficina</h1>
           <p>
             Preencha os dados da oficina e defina o administrador responsável
-            pelo primeiro acesso.
+            e sua senha de acesso.
           </p>
         </div>
 
@@ -282,9 +291,7 @@ function OficinaCadastro() {
             </div>
 
             <p className="cadastro-success-note">
-              O administrador da oficina deverá concluir o primeiro acesso para
-              configurar sua senha. A confirmação do e-mail não ativa
-              automaticamente a oficina.
+              O administrador poderá fazer login utilizando o e-mail informado e a senha cadastrada, assim que a oficina for ativada.
             </p>
 
             <div className="cadastro-form-actions">
@@ -432,10 +439,24 @@ function OficinaCadastro() {
                 maxLength={150}
                 required={!mesmoEmail}
               />
+            </div>
 
+            <div className="cadastro-field">
+              <label htmlFor="administrador-senha">
+                Senha de acesso <span>*</span>
+              </label>
+              <input
+                id="administrador-senha"
+                name="senha"
+                type="password"
+                placeholder="Mínimo de 6 caracteres"
+                value={formulario.senha}
+                onChange={alterarCampo}
+                maxLength={100}
+                required
+              />
               <small>
-                Este e-mail será utilizado para o primeiro acesso e a
-                autenticação do administrador.
+                Esta senha será utilizada pelo administrador para entrar no sistema.
               </small>
             </div>
 
@@ -443,13 +464,10 @@ function OficinaCadastro() {
               <div className="cadastro-info-icon">i</div>
 
               <div>
-                <strong>Como funciona a ativação?</strong>
+                <h2>Como funciona a ativação?</h2>
 
                 <p>
-                  A oficina será criada como inativa. O administrador poderá
-                  confirmar seu e-mail e configurar sua senha pelo fluxo de
-                  primeiro acesso, mas somente o ADM_SISTEMA poderá liberar a
-                  oficina.
+                  A oficina será criada. O administrador poderá fazer o login com o e-mail e a senha cadastrados, e a liberação de acesso geral dependerá do ADM_SISTEMA.
                 </p>
               </div>
             </div>

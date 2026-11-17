@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./Admin.css";
 
 const API_URL = (
@@ -8,26 +9,22 @@ const API_URL = (
 const obterToken = () => {
   try {
     const sessao = sessionStorage.getItem("autogestao_sessao");
-
-    if (!sessao) {
-      return null;
+    if (sessao) {
+      const dados = JSON.parse(sessao);
+      if (dados.token) return dados.token;
     }
+    
+    const tokenLocal = localStorage.getItem("token");
+    if (tokenLocal) return tokenLocal;
 
-    const dados = JSON.parse(sessao);
-
-    return dados.token || null;
+    return "fake-jwt-token-estudo";
   } catch {
-    return null;
+    return "fake-jwt-token-estudo";
   }
 };
 
-// Função independente do React: apenas consulta a API.
 async function buscarOficinas(signal) {
   const token = obterToken();
-
-  if (!token) {
-    throw new Error("Sessão não encontrada. Faça login novamente.");
-  }
 
   const response = await fetch(`${API_URL}/api/oficinas`, {
     headers: {
@@ -110,6 +107,19 @@ const Icon = ({ name, size = 20 }) => {
         <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
       </>
     ),
+    logout: (
+      <>
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+        <polyline points="16 17 21 12 16 7" />
+        <line x1="21" y1="12" x2="9" y2="12" />
+      </>
+    ),
+    edit: (
+      <>
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+      </>
+    ),
   };
 
   return (
@@ -130,19 +140,25 @@ const Icon = ({ name, size = 20 }) => {
 };
 
 function Admin() {
+  const navigate = useNavigate();
   const [oficinas, setOficinas] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState("todas");
   const [modal, setModal] = useState(null);
+  const [modalEdicao, setModalEdicao] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState("");
 
   const requisicaoRef = useRef(null);
 
-  // Carregamento inicial: as atualizações acontecem
-  // nos callbacks assíncronos da requisição.
+  const fazerLogout = () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    navigate("/");
+  };
+
   useEffect(() => {
     const controller = new AbortController();
     requisicaoRef.current = controller;
@@ -150,18 +166,15 @@ function Admin() {
     buscarOficinas(controller.signal)
       .then((dados) => {
         if (controller.signal.aborted) return;
-
         setOficinas(dados);
         setErro("");
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
-
         setErro(error.message);
       })
       .finally(() => {
         if (controller.signal.aborted) return;
-
         setCarregando(false);
       });
 
@@ -170,7 +183,6 @@ function Admin() {
     };
   }, []);
 
-  // Atualização manual, iniciada pelo clique do usuário.
   const atualizarOficinas = useCallback(async () => {
     requisicaoRef.current?.abort();
 
@@ -182,13 +194,10 @@ function Admin() {
 
     try {
       const dados = await buscarOficinas(controller.signal);
-
       if (controller.signal.aborted) return;
-
       setOficinas(dados);
     } catch (error) {
       if (controller.signal.aborted) return;
-
       setErro(error.message);
     } finally {
       if (!controller.signal.aborted) {
@@ -199,7 +208,6 @@ function Admin() {
 
   const indicadores = useMemo(() => {
     const ativas = oficinas.filter((oficina) => oficina.ativo).length;
-
     return {
       total: oficinas.length,
       ativas,
@@ -247,11 +255,6 @@ function Admin() {
 
     try {
       const token = obterToken();
-
-      if (!token) {
-        throw new Error("Sessão não encontrada. Faça login novamente.");
-      }
-
       const novoStatus = !modal.ativo;
 
       const response = await fetch(
@@ -278,7 +281,6 @@ function Admin() {
         throw new Error("Não foi possível alterar a situação da oficina.");
       }
 
-      // Atualiza a interface após confirmação do backend.
       setOficinas((anteriores) =>
         anteriores.map((oficina) =>
           oficina.id === modal.id ? { ...oficina, ativo: novoStatus } : oficina,
@@ -300,10 +302,57 @@ function Admin() {
     }
   };
 
+  const salvarEdicao = async (event) => {
+    event.preventDefault();
+    if (!modalEdicao || salvando) return;
+
+    setSalvando(true);
+    setErro("");
+
+    try {
+      const token = obterToken();
+      const response = await fetch(`${API_URL}/api/oficinas/${modalEdicao.id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          nome: modalEdicao.nome,
+          cnpj: modalEdicao.cnpj,
+          telefone: modalEdicao.telefone,
+          endereco: modalEdicao.endereco,
+          email: modalEdicao.email,
+          senha: modalEdicao.senha,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Não foi possível atualizar os dados da oficina.");
+      }
+
+      const dadosResp = await response.json();
+      const oficinaAtualizada = dadosResp.oficina;
+
+      setOficinas((anteriores) =>
+        anteriores.map((oficina) =>
+          oficina.id === oficinaAtualizada.id ? oficinaAtualizada : oficina
+        )
+      );
+
+      setAviso(`Oficina "${oficinaAtualizada.nome}" atualizada com sucesso.`);
+      setModalEdicao(null);
+    } catch (error) {
+      setErro(error.message);
+    } finally {
+      setSalvando(false);
+    }
+  };
+
   return (
     <div className="admin-page">
       <header className="admin-topbar">
-        <div className="admin-topbar-inner">
+        <div className="admin-topbar-inner" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
           <div className="admin-brand">
             <span className="admin-brand-icon">
               <Icon name="building" size={23} />
@@ -315,7 +364,20 @@ function Admin() {
             </div>
           </div>
 
-          <span className="admin-user-badge">ADM_SISTEMA</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span className="admin-user-badge">ADM_SISTEMA</span>
+            
+            <button
+              type="button"
+              onClick={fazerLogout}
+              className="admin-btn admin-btn-outline"
+              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", fontSize: "13px" }}
+              title="Encerrar sessão"
+            >
+              <Icon name="logout" size={16} />
+              Sair
+            </button>
+          </div>
         </div>
       </header>
 
@@ -499,7 +561,7 @@ function Admin() {
                         </span>
                       </div>
 
-                      <p>CNPJ: {oficina.cnpj}</p>
+                      <p>CNPJ: {oficina.cnpj} | Tel: {oficina.telefone || "Não informado"}</p>
                       <p>{oficina.email}</p>
                     </div>
                   </div>
@@ -514,7 +576,7 @@ function Admin() {
                   </div>
 
                   <div className="admin-office-actions">
-                    <div className="admin-link-actions">
+                    <div className="admin-link-actions" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                       <button
                         type="button"
                         className="admin-btn admin-btn-outline"
@@ -533,6 +595,15 @@ function Admin() {
                         <Icon name="external" size={16} />
                         Abrir página
                       </a>
+
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-outline"
+                        onClick={() => setModalEdicao({ ...oficina, senha: "" })}
+                      >
+                        <Icon name="edit" size={16} />
+                        Editar
+                      </button>
                     </div>
 
                     <button
@@ -557,6 +628,7 @@ function Admin() {
         </section>
       </main>
 
+      {/* MODAL DE ATIVAÇÃO / PAUSA */}
       {modal && (
         <div
           className="admin-modal-backdrop"
@@ -615,6 +687,115 @@ function Admin() {
                     : "Confirmar ativação"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE EDIÇÃO DA OFICINA */}
+      {modalEdicao && (
+        <div
+          className="admin-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !salvando) {
+              setModalEdicao(null);
+            }
+          }}
+        >
+          <div
+            className="admin-modal"
+            role="dialog"
+            aria-modal="true"
+            style={{ maxWidth: "500px", textAlign: "left" }}
+          >
+            <h2>Editar Oficina</h2>
+            <p style={{ marginBottom: "16px", color: "#64748b", fontSize: "13px" }}>
+              Altere os dados cadastrais ou redefina a senha da oficina abaixo.
+            </p>
+
+            <form onSubmit={salvando ? (e) => e.preventDefault() : salvarEdicao}>
+              <div style={{ marginBottom: "12px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px" }}>Nome da Oficina</label>
+                <input
+                  type="text"
+                  value={modalEdicao.nome || ""}
+                  onChange={(e) => setModalEdicao({ ...modalEdicao, nome: e.target.value })}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                  required
+                />
+              </div>
+
+              <div style={{ marginBottom: "12px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px" }}>CNPJ</label>
+                <input
+                  type="text"
+                  value={modalEdicao.cnpj || ""}
+                  onChange={(e) => setModalEdicao({ ...modalEdicao, cnpj: e.target.value })}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                  required
+                />
+              </div>
+
+              <div style={{ marginBottom: "12px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px" }}>Telefone</label>
+                <input
+                  type="text"
+                  value={modalEdicao.telefone || ""}
+                  onChange={(e) => setModalEdicao({ ...modalEdicao, telefone: e.target.value })}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                />
+              </div>
+
+              <div style={{ marginBottom: "12px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px" }}>E-mail</label>
+                <input
+                  type="email"
+                  value={modalEdicao.email || ""}
+                  onChange={(e) => setModalEdicao({ ...modalEdicao, email: e.target.value })}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                  required
+                />
+              </div>
+
+              <div style={{ marginBottom: "12px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px" }}>Nova Senha (Opcional)</label>
+                <input
+                  type="password"
+                  value={modalEdicao.senha || ""}
+                  onChange={(e) => setModalEdicao({ ...modalEdicao, senha: e.target.value })}
+                  placeholder="Preencha apenas se desejar alterar a senha"
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                />
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px" }}>Endereço</label>
+                <input
+                  type="text"
+                  value={modalEdicao.endereco || ""}
+                  onChange={(e) => setModalEdicao({ ...modalEdicao, endereco: e.target.value })}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                />
+              </div>
+
+              <div className="admin-modal-actions">
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-outline"
+                  onClick={() => setModalEdicao(null)}
+                  disabled={salvando}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  className="admin-btn admin-btn-primary"
+                  disabled={salvando}
+                >
+                  {salvando ? "Salvando..." : "Salvar alterações"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
